@@ -50,6 +50,7 @@
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
+#define PLAY_BUFF_SAMPLES (2*BUFF_SAMPLES)
 #define SaturaLH(N, L, H) (((N)<(L))?(L):(((N)>(H))?(H):(N)))
 /* Private variables ---------------------------------------------------------*/
 DFSDM_Channel_HandleTypeDef  DfsdmChannelHandle;
@@ -58,8 +59,8 @@ DMA_HandleTypeDef            hDfsdmDma;
 SAI_HandleTypeDef            SaiHandle;
 DMA_HandleTypeDef            hSaiDma;
 AUDIO_DrvTypeDef            *audio_drv;
-int32_t                      RecBuff[2048];
-int16_t                      PlayBuff[4096];
+int32_t                      RecBuff[BUFF_SAMPLES];
+int16_t                      PlayBuff[PLAY_BUFF_SAMPLES];
 uint32_t                     DmaRecHalfBuffCplt  = 0;
 uint32_t                     DmaRecBuffCplt      = 0;
 uint32_t                     PlaybackStarted         = 0;
@@ -103,7 +104,7 @@ int main(void)
   Playback_Init();
   
   /* Start DFSDM conversions */
-  if(HAL_OK != HAL_DFSDM_FilterRegularStart_DMA(&DfsdmFilterHandle, RecBuff, 2048))
+  if(HAL_OK != HAL_DFSDM_FilterRegularStart_DMA(&DfsdmFilterHandle, RecBuff, BUFF_SAMPLES))
   {
     Error_Handler();
   }
@@ -114,18 +115,18 @@ int main(void)
     if(DmaRecHalfBuffCplt == 1)
     {
       /* Store values on Play buff */
-      for(i = 0; i < 1024; i++)
+      for(i = 0; i < BUFF_SAMPLES/2; i++)
       {
         PlayBuff[2*i]     = SaturaLH((RecBuff[i] >> 8), -32768, 32767);
         PlayBuff[(2*i)+1] = PlayBuff[2*i];
       }
       if(PlaybackStarted == 0)
       {
-        if(0 != audio_drv->Play(AUDIO_I2C_ADDRESS, (uint16_t *) &PlayBuff[0], 4096))
+        if(0 != audio_drv->Play(AUDIO_I2C_ADDRESS, (uint16_t *) &PlayBuff[0], PLAY_BUFF_SAMPLES))
         {
           Error_Handler();
         }
-        if(HAL_OK != HAL_SAI_Transmit_DMA(&SaiHandle, (uint8_t *) &PlayBuff[0], 4096))
+        if(HAL_OK != HAL_SAI_Transmit_DMA(&SaiHandle, (uint8_t *) &PlayBuff[0], PLAY_BUFF_SAMPLES))
         {
           Error_Handler();
         }
@@ -136,7 +137,7 @@ int main(void)
     if(DmaRecBuffCplt == 1)
     {
       /* Store values on Play buff */
-      for(i = 1024; i < 2048; i++)
+      for(i = BUFF_SAMPLES/2; i < BUFF_SAMPLES; i++)
       {
         PlayBuff[2*i]     = SaturaLH((RecBuff[i] >> 8), -32768, 32767);
         PlayBuff[(2*i)+1] = PlayBuff[2*i];
