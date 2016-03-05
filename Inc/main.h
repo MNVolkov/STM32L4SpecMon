@@ -45,6 +45,9 @@
 #include "audio.h"
 #include "../Components/cs43l22/cs43l22.h"
 
+/* CMSIS OS includes component */
+#include "cmsis_os.h"
+
 /* Exported types ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
 /* Exported macro ------------------------------------------------------------*/

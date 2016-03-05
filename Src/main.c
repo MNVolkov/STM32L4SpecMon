@@ -63,7 +63,12 @@ int32_t                      RecBuff[BUFF_SAMPLES];
 int16_t                      PlayBuff[PLAY_BUFF_SAMPLES];
 uint32_t                     DmaRecHalfBuffCplt  = 0;
 uint32_t                     DmaRecBuffCplt      = 0;
-uint32_t                     PlaybackStarted         = 0;
+uint32_t                     PlaybackStarted     = 0;
+
+/* FreeRTOS syncronization primitives */
+SemaphoreHandle_t hDataReadySemaphore;
+TaskHandle_t      hDataProcessingTask;
+
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void DFSDM_Init(void);
@@ -71,49 +76,16 @@ static void Playback_Init(void);
 
 /* Private functions ---------------------------------------------------------*/
 
-/**
-  * @brief  Main program
-  * @param  None
-  * @retval None
-  */
-int main(void)
+void DataProcessingTask(void* ctx)
 {
   uint32_t i;
-  /* STM32L4xx HAL library initialization:
-       - Configure the Flash prefetch
-       - Systick timer is configured by default as source of time base, but user 
-         can eventually implement his proper time base source (a general purpose 
-         timer for example or other time source), keeping in mind that Time base 
-         duration should be kept 1ms since PPP_TIMEOUT_VALUEs are defined and 
-         handled in milliseconds basis.
-       - Set NVIC Group Priority to 4
-       - Low Level Initialization
-     */
-  HAL_Init();
-
-  /* Configure the system clock to have a frequency of 80 MHz */
-  SystemClock_Config();
-
-  /* Configure LED4 */
-  BSP_LED_Init(LED4);
-
-  /* Initialize DFSDM channels and filter for record */
-  DFSDM_Init();
-
-  /* Initialize playback */
-  Playback_Init();
-  
-  /* Start DFSDM conversions */
-  if(HAL_OK != HAL_DFSDM_FilterRegularStart_DMA(&DfsdmFilterHandle, RecBuff, BUFF_SAMPLES))
-  {
-    Error_Handler();
-  }
-  
   /* Start loopback */
-  while(1)
+  for (;;)
   {
+    xSemaphoreTake(hDataReadySemaphore, ~0);
     if(DmaRecHalfBuffCplt == 1)
     {
+      DmaRecHalfBuffCplt = 0;
       /* Store values on Play buff */
       for(i = 0; i < BUFF_SAMPLES/2; i++)
       {
@@ -132,19 +104,66 @@ int main(void)
         }
         PlaybackStarted = 1;
       }      
-      DmaRecHalfBuffCplt  = 0;
     }
     if(DmaRecBuffCplt == 1)
     {
+      DmaRecBuffCplt = 0;
       /* Store values on Play buff */
       for(i = BUFF_SAMPLES/2; i < BUFF_SAMPLES; i++)
       {
         PlayBuff[2*i]     = SaturaLH((RecBuff[i] >> 8), -32768, 32767);
         PlayBuff[(2*i)+1] = PlayBuff[2*i];
       }
-      DmaRecBuffCplt  = 0;
     }
   }
+}
+
+/**
+  * @brief  Main program
+  * @param  None
+  * @retval None
+  */
+int main(void)
+{
+  /* STM32L4xx HAL library initialization:
+       - Configure the Flash prefetch
+       - Systick timer is configured by default as source of time base, but user 
+         can eventually implement his proper time base source (a general purpose 
+         timer for example or other time source), keeping in mind that Time base 
+         duration should be kept 1ms since PPP_TIMEOUT_VALUEs are defined and 
+         handled in milliseconds basis.
+       - Set NVIC Group Priority to 4
+       - Low Level Initialization
+     */
+  HAL_Init();
+
+  /* Configure the system clock to have a frequency of 80 MHz */
+  SystemClock_Config();
+
+  /* Initialize FreeRTOS stuff */
+  hDataReadySemaphore = xSemaphoreCreateBinary();
+  xTaskCreate(DataProcessingTask, "DataProcessing", 64, 0, 4, &hDataProcessingTask);
+
+  /* Configure LED4 */
+  BSP_LED_Init(LED4);
+
+  /* Initialize DFSDM channels and filter for record */
+  DFSDM_Init();
+
+  /* Initialize playback */
+  Playback_Init();
+  
+  /* Start DFSDM conversions */
+  if(HAL_OK != HAL_DFSDM_FilterRegularStart_DMA(&DfsdmFilterHandle, RecBuff, BUFF_SAMPLES))
+  {
+    Error_Handler();
+  }
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
+  return 0;
 }
 
 /**
@@ -445,6 +464,7 @@ void HAL_SAI_MspInit(SAI_HandleTypeDef *hsai)
 void HAL_DFSDM_FilterRegConvHalfCpltCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_filter)
 {
   DmaRecHalfBuffCplt = 1;
+  xSemaphoreGiveFromISR(hDataReadySemaphore, 0);
 }
 
 /**
@@ -457,6 +477,27 @@ void HAL_DFSDM_FilterRegConvHalfCpltCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_
 void HAL_DFSDM_FilterRegConvCpltCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_filter)
 {
   DmaRecBuffCplt = 1;
+  xSemaphoreGiveFromISR(hDataReadySemaphore, 0);
+}
+
+/* FreeRTOS hooks */
+/**
+  * @brief  Application Idle Hook
+  * @param  None 
+  * @retval None
+  */
+void vApplicationIdleHook(void) 
+{
+}
+
+/**
+  * @brief  Application Malloc failure Hook
+  * @param  None 
+  * @retval None
+  */
+void vApplicationMallocFailedHook(void)
+{
+  Error_Handler();
 }
 
 #ifdef  USE_FULL_ASSERT

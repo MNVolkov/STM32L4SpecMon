@@ -317,6 +317,9 @@
           <state>$PROJ_DIR$\..\Drivers\STM32L4xx_HAL_Driver\Inc</state>
           <state>$PROJ_DIR$\..\Drivers\BSP\STM32L476G-Discovery</state>
           <state>$PROJ_DIR$\..\Drivers\BSP\Components\Common</state>
+          <state>$PROJ_DIR$\..\FreeRTOS\Source\include</state>
+          <state>$PROJ_DIR$\..\FreeRTOS\Source\CMSIS_RTOS</state>
+          <state>$PROJ_DIR$\..\FreeRTOS\Source\portable\IAR\ARM_CM4F</state>
         </option>
         <option>
           <name>CCStdIncCheck</name>
@@ -578,7 +581,7 @@
         </option>
         <option>
           <name>AUserIncludes</name>
-          <state></state>
+          <state>$PROJ_DIR$\..\Inc</state>
         </option>
         <option>
           <name>AExtraOptionsCheckV2</name>
@@ -612,7 +615,7 @@
         </option>
         <option>
           <name>OOCOutputFile</name>
-          <state>STM32L476G-Discovery.hex</state>
+          <state>Project.srec</state>
         </option>
         <option>
           <name>OOCCommandLineProducer</name>
@@ -964,6 +967,24 @@
     </settings>
   </configuration>
   <group>
+    <name>Application</name>
+    <group>
+      <name>EWARM</name>
+      <file>
+        <name>$PROJ_DIR$\startup_stm32l476xx.s</name>
+      </file>
+    </group>
+    <group>
+      <name>User</name>
+      <file>
+        <name>$PROJ_DIR$\..\Src\main.c</name>
+      </file>
+      <file>
+        <name>$PROJ_DIR$\..\Src\stm32l4xx_it.c</name>
+      </file>
+    </group>
+  </group>
+  <group>
     <name>Drivers</name>
     <group>
       <name>BSP</name>
@@ -1021,20 +1042,35 @@
     </group>
   </group>
   <group>
-    <name>Example</name>
+    <name>Middlewares</name>
     <group>
-      <name>EWARM</name>
+      <name>FreeRTOS</name>
+      <group>
+        <name>Portable</name>
+        <file>
+          <name>$PROJ_DIR$\..\FreeRTOS\Source\CMSIS_RTOS\cmsis_os.c</name>
+        </file>
+        <file>
+          <name>$PROJ_DIR$\..\FreeRTOS\Source\portable\MemMang\heap_4.c</name>
+        </file>
+        <file>
+          <name>$PROJ_DIR$\..\FreeRTOS\Source\portable\IAR\ARM_CM4F\port.c</name>
+        </file>
+        <file>
+          <name>$PROJ_DIR$\..\FreeRTOS\Source\portable\IAR\ARM_CM4F\portasm.s</name>
+        </file>
+      </group>
       <file>
-        <name>$PROJ_DIR$\startup_stm32l476xx.s</name>
+        <name>$PROJ_DIR$\..\FreeRTOS\Source\list.c</name>
       </file>
-    </group>
-    <group>
-      <name>User</name>
       <file>
-        <name>$PROJ_DIR$\..\Src\main.c</name>
+        <name>$PROJ_DIR$\..\FreeRTOS\Source\queue.c</name>
       </file>
       <file>
-        <name>$PROJ_DIR$\..\Src\stm32l4xx_it.c</name>
+        <name>$PROJ_DIR$\..\FreeRTOS\Source\tasks.c</name>
+      </file>
+      <file>
+        <name>$PROJ_DIR$\..\FreeRTOS\Source\timers.c</name>
       </file>
     </group>
   </group>
