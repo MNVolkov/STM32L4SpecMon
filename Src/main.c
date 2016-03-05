@@ -410,7 +410,7 @@ void HAL_DFSDM_FilterMspInit(DFSDM_Filter_HandleTypeDef *hdfsdm_filter)
   {
     Error_Handler();
   }
-  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 0x01, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
 }
 
