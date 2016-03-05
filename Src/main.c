@@ -38,6 +38,8 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "arm_math.h"
+#include "arm_const_structs.h"
 
 /** @addtogroup STM32L4xx_HAL_Examples
   * @{
@@ -59,15 +61,23 @@ DMA_HandleTypeDef            hDfsdmDma;
 SAI_HandleTypeDef            SaiHandle;
 DMA_HandleTypeDef            hSaiDma;
 AUDIO_DrvTypeDef            *audio_drv;
-int32_t                      RecBuff[BUFF_SAMPLES];
+int32_t                      FrameBuff[BUFF_SAMPLES];
+float32_t                    FftBuff[BUFF_SAMPLES*2];
+float32_t                    SpecBuff[SPEC_LEN];
 int16_t                      PlayBuff[PLAY_BUFF_SAMPLES];
 uint32_t                     DmaRecHalfBuffCplt  = 0;
 uint32_t                     DmaRecBuffCplt      = 0;
 uint32_t                     PlaybackStarted     = 0;
 
-/* FreeRTOS syncronization primitives */
+/* FreeRTOS synchronization primitives */
 SemaphoreHandle_t hDataReadySemaphore;
-TaskHandle_t      hDataProcessingTask;
+SemaphoreHandle_t hFrameReadySemaphore;
+SemaphoreHandle_t hSpecReadySemaphore;
+
+/* FreeRTOS tasks */
+TaskHandle_t      hDataAcquisitionTask;
+TaskHandle_t      hFrameProcessingTask;
+TaskHandle_t      hSpecDisplayTask;
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
@@ -76,46 +86,122 @@ static void Playback_Init(void);
 
 /* Private functions ---------------------------------------------------------*/
 
-void DataProcessingTask(void* ctx)
+void SpecDisplayTask(void* ctx)
 {
-  uint32_t i;
-  /* Start loopback */
+  for (;;) {
+    int i;
+    /* Wait spectrum ready */
+    xSemaphoreTake(hSpecReadySemaphore, ~0);
+    for (i = 0; i < SPEC_LEN; ++i)
+    {
+    }
+  }
+}
+
+void FrameProcessingTask(void* ctx)
+{
+  for (;;)
+  {
+    int idx = 0;
+    float32_t *pSpec = SpecBuff, *pEnd = SpecBuff + SPEC_LEN;
+    float32_t const* pFft = &FftBuff[2];
+    /* Wait frame ready */
+    xSemaphoreTake(hFrameReadySemaphore, ~0);
+    arm_cfft_f32(&arm_cfft_sR_f32_len1024, FftBuff, 0, 1);
+    for (; pSpec < pEnd; ++pSpec)
+    {
+      float32_t f = *pFft * *pFft;
+      ++pFft;
+      f += *pFft * *pFft;
+      ++pFft;
+	  if (!idx) {
+        *pSpec = f;
+      } else {
+        *pSpec += f;
+      }
+    }
+    if (!idx) {
+      idx = 1;
+    } else {
+      idx = 0;
+      xSemaphoreGive(hSpecReadySemaphore);
+    }
+  }
+}
+
+static inline void StartPlayback(void)
+{
+  if (0 != audio_drv->Play(AUDIO_I2C_ADDRESS, (uint16_t *) &PlayBuff[0], PLAY_BUFF_SAMPLES))
+  {
+    Error_Handler();
+  }
+  if (HAL_OK != HAL_SAI_Transmit_DMA(&SaiHandle, (uint8_t *) &PlayBuff[0], PLAY_BUFF_SAMPLES))
+  {
+    Error_Handler();
+  }
+}
+
+static inline void CollectSamples(int from, int to)
+{
+  int i;
+  int32_t const* pSample = FrameBuff + from;
+  int16_t* pPlayBuff = PlayBuff + from * 2;
+  float32_t* pFftFrame = FftBuff + from * 2;
+  for (i = from; i < to; ++i)
+  {
+    int32_t val = *pSample++;
+    int16_t sval = SaturaLH((val >> 8), -32768, 32767);
+    *pPlayBuff++ = sval;
+    *pPlayBuff++ = sval;
+    *pFftFrame++ = (float32_t)val;
+    *pFftFrame++ = 0;
+  }	
+}
+
+static inline void StartAcquisition(void)
+{
+  /* Start DFSDM conversions */
+  if(HAL_OK != HAL_DFSDM_FilterRegularStart_DMA(&DfsdmFilterHandle, FrameBuff, BUFF_SAMPLES))
+  {
+    Error_Handler();
+  }
+}
+
+void DataAcquisitionTask(void* ctx)
+{
+  StartAcquisition();
+  /* Data acquisition loop */
   for (;;)
   {
     xSemaphoreTake(hDataReadySemaphore, ~0);
-    if(DmaRecHalfBuffCplt == 1)
+    if (DmaRecHalfBuffCplt)
     {
       DmaRecHalfBuffCplt = 0;
-      /* Store values on Play buff */
-      for(i = 0; i < BUFF_SAMPLES/2; i++)
+      CollectSamples(0, BUFF_SAMPLES/2);
+      if (!PlaybackStarted)
       {
-        PlayBuff[2*i]     = SaturaLH((RecBuff[i] >> 8), -32768, 32767);
-        PlayBuff[(2*i)+1] = PlayBuff[2*i];
-      }
-      if(PlaybackStarted == 0)
-      {
-        if(0 != audio_drv->Play(AUDIO_I2C_ADDRESS, (uint16_t *) &PlayBuff[0], PLAY_BUFF_SAMPLES))
-        {
-          Error_Handler();
-        }
-        if(HAL_OK != HAL_SAI_Transmit_DMA(&SaiHandle, (uint8_t *) &PlayBuff[0], PLAY_BUFF_SAMPLES))
-        {
-          Error_Handler();
-        }
+        StartPlayback();
         PlaybackStarted = 1;
       }      
     }
-    if(DmaRecBuffCplt == 1)
+    if (DmaRecBuffCplt)
     {
       DmaRecBuffCplt = 0;
-      /* Store values on Play buff */
-      for(i = BUFF_SAMPLES/2; i < BUFF_SAMPLES; i++)
-      {
-        PlayBuff[2*i]     = SaturaLH((RecBuff[i] >> 8), -32768, 32767);
-        PlayBuff[(2*i)+1] = PlayBuff[2*i];
-      }
+      CollectSamples(BUFF_SAMPLES/2, BUFF_SAMPLES);
+      xSemaphoreGive(hFrameReadySemaphore);
     }
   }
+}
+
+/* Initialize FreeRTOS stuff */
+static void osInit(void)
+{
+  hDataReadySemaphore  = xSemaphoreCreateCounting(1, 0);
+  hFrameReadySemaphore = xSemaphoreCreateCounting(1, 0);
+  hSpecReadySemaphore  = xSemaphoreCreateCounting(1, 0);
+  xTaskCreate(DataAcquisitionTask, "Acquisition", 64, 0, 2, &hDataAcquisitionTask);
+  xTaskCreate(FrameProcessingTask, "Processing",  64, 0, 2, &hFrameProcessingTask);
+  xTaskCreate(SpecDisplayTask,     "Display",     64, 0, 2, &hSpecDisplayTask);
 }
 
 /**
@@ -140,10 +226,6 @@ int main(void)
   /* Configure the system clock to have a frequency of 80 MHz */
   SystemClock_Config();
 
-  /* Initialize FreeRTOS stuff */
-  hDataReadySemaphore = xSemaphoreCreateBinary();
-  xTaskCreate(DataProcessingTask, "DataProcessing", 64, 0, 4, &hDataProcessingTask);
-
   /* Configure LED4 */
   BSP_LED_Init(LED4);
 
@@ -152,12 +234,9 @@ int main(void)
 
   /* Initialize playback */
   Playback_Init();
-  
-  /* Start DFSDM conversions */
-  if(HAL_OK != HAL_DFSDM_FilterRegularStart_DMA(&DfsdmFilterHandle, RecBuff, BUFF_SAMPLES))
-  {
-    Error_Handler();
-  }
+
+  /* Initialize FreeRTOS stuff */
+  osInit();
 
   /* Start scheduler */
   osKernelStart();

@@ -52,6 +52,7 @@
 /* Exported constants --------------------------------------------------------*/
 /* Exported macro ------------------------------------------------------------*/
 #define BUFF_SAMPLES 1024
+#define SPEC_LEN     320
 
 /* Exported functions ------------------------------------------------------- */
 void Error_Handler(void);
