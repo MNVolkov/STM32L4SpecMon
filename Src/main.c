@@ -86,15 +86,39 @@ static void Playback_Init(void);
 
 /* Private functions ---------------------------------------------------------*/
 
+#define BT_DEBOUNCE 2
+
 void SpecDisplayTask(void* ctx)
 {
+  int active = 1;
+  int bt_pressed = 0;
+  BSP_LED_On(LED4);
   for (;;) {
-    int i;
     /* Wait spectrum ready */
     xSemaphoreTake(hSpecReadySemaphore, ~0);
-    BSP_LED_Toggle(LED4);
-    for (i = 0; i < SPEC_LEN; ++i)
+    switch (BSP_JOY_GetState())
     {
+    case JOY_SEL:
+      if (!bt_pressed) {
+		if (active) {
+		  active = 0;
+		  BSP_LED_Off(LED4);
+	    } else {
+		  active = 1;
+		  BSP_LED_On(LED4);
+	    }
+      }
+	  bt_pressed = BT_DEBOUNCE;
+	  break;
+    case JOY_NONE:
+	  if (bt_pressed) {
+		--bt_pressed;
+	  }
+	  break;
+	default:
+	  ;
+    }
+    if (active) {
     }
   }
 }
@@ -227,8 +251,9 @@ int main(void)
   /* Configure the system clock to have a frequency of 80 MHz */
   SystemClock_Config();
 
-  /* Configure LED4 */
+  /* Configure LED and joystick */
   BSP_LED_Init(LED4);
+  BSP_JOY_Init(JOY_MODE_GPIO);
 
   /* Initialize DFSDM channels and filter for record */
   DFSDM_Init();
