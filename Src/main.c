@@ -54,6 +54,18 @@
 /* Private macro -------------------------------------------------------------*/
 #define PLAY_BUFF_SAMPLES (2*BUFF_SAMPLES)
 #define SaturaLH(N, L, H) (((N)<(L))?(L):(((N)>(H))?(H):(N)))
+
+#define MODES 3
+#define BUFF_SAMPLES 2048
+#define FFT_BUFF_LEN (BUFF_SAMPLES*2)
+#define MOD_BUFF_LEN (SPEC_LEN<<(MODES-1))
+
+#if (BUFF_SAMPLES == 2048)
+#define FFT_PARAMS arm_cfft_sR_f32_len2048
+#endif
+
+#define BT_DEBOUNCE 2
+
 /* Private variables ---------------------------------------------------------*/
 DFSDM_Channel_HandleTypeDef  DfsdmChannelHandle;
 DFSDM_Filter_HandleTypeDef   DfsdmFilterHandle;
@@ -62,7 +74,8 @@ SAI_HandleTypeDef            SaiHandle;
 DMA_HandleTypeDef            hSaiDma;
 AUDIO_DrvTypeDef            *audio_drv;
 int32_t                      FrameBuff[BUFF_SAMPLES];
-float32_t                    FftBuff[BUFF_SAMPLES*2];
+float32_t                    FftBuff[FFT_BUFF_LEN];
+float32_t                    ModBuff[MOD_BUFF_LEN];
 float32_t                    SpecBuff[SPEC_LEN];
 int16_t                      PlayBuff[PLAY_BUFF_SAMPLES];
 uint32_t                     DmaRecHalfBuffCplt  = 0;
@@ -86,21 +99,44 @@ static void Playback_Init(void);
 
 /* Private functions ---------------------------------------------------------*/
 
-#define BT_DEBOUNCE 2
+static const uint8_t* mode_info[MODES] = {
+  "5  kHZ",
+  "10 kHZ",
+  "20 kHZ",
+};
 
 void SpecDisplayTask(void* ctx)
 {
-  int active = 1;
-  int bt_pressed = 0;
+  int mode = 0, active = 1;
+  int m_pressed = 0, a_pressed = 0;
   BSP_LED_On(LED4);
+  BSP_LCD_GLASS_DisplayString((uint8_t*)mode_info[mode]);
   for (;;) {
     /* Wait spectrum ready */
     xSemaphoreTake(hSpecReadySemaphore, ~0);
     /* Process joystick input to on/off display updates */
     switch (BSP_JOY_GetState())
     {
+    case JOY_RIGHT:
+      if (!m_pressed) {
+        if (mode > 0) {
+          --mode;
+          BSP_LCD_GLASS_DisplayString((uint8_t*)mode_info[mode]);
+        }
+      }
+      m_pressed = BT_DEBOUNCE;
+      break;
+    case JOY_LEFT:
+      if (!m_pressed) {
+        if (mode < MODES-1) {
+          ++mode;
+          BSP_LCD_GLASS_DisplayString((uint8_t*)mode_info[mode]);
+        }
+      }
+      m_pressed = BT_DEBOUNCE;
+      break;
     case JOY_SEL:
-      if (!bt_pressed) {
+      if (!a_pressed) {
         if (active) {
           active = 0;
           BSP_LED_Off(LED4);
@@ -109,56 +145,66 @@ void SpecDisplayTask(void* ctx)
           BSP_LED_On(LED4);
         }
       }
-      bt_pressed = BT_DEBOUNCE;
+      a_pressed = BT_DEBOUNCE;
       break;
     case JOY_NONE:
-      if (bt_pressed) {
-        --bt_pressed;
+      /* Debounce decay */
+      if (m_pressed) {
+        --m_pressed;
+      }
+      if (a_pressed) {
+        --a_pressed;
       }
       break;
     default:
       ;
     }
-    if (active) {
+    if (!active) {
+      continue;
+    }
+    if (mode) {
+      /* Spectrum binning */
+      unsigned bin = 1 << mode, curr_bin = bin;
+      float32_t *pSpec = SpecBuff;
+      float32_t *pMod = ModBuff, *pEnd = ModBuff + MOD_BUFF_LEN;
+      float32_t sum = 0;
+      for (; pMod < pEnd; ++pMod)
+      {
+        sum += *pMod;
+        if (!--curr_bin) {
+          *pSpec++ = sum / bin;
+          curr_bin = bin;
+          sum = 0;
+        }
+      }
       spec_display_show(SpecBuff);
+    } else {
+      spec_display_show(ModBuff);
     }
   }
 }
 
-#ifdef HIGH_FREQ_RANGE
-#define FFT_PARAMS arm_cfft_sR_f32_len1024
-#else
-#define FFT_PARAMS arm_cfft_sR_f32_len2048
-#endif
-
 void FrameProcessingTask(void* ctx)
 {
-  int idx = 0;
   for (;;)
   {
-    float32_t *pSpec = SpecBuff, *pEnd = SpecBuff + SPEC_LEN;
+    float32_t *pMod = ModBuff, *pEnd = ModBuff + MOD_BUFF_LEN;
     float32_t const* pFft = &FftBuff[2];
     /* Wait frame ready */
     xSemaphoreTake(hFrameReadySemaphore, ~0);
+    /* Transform to frequency domain */
     arm_cfft_f32(&FFT_PARAMS, FftBuff, 0, 1);
-    for (; pSpec < pEnd; ++pSpec)
+    /* Calculate complex module square */
+    for (; pMod < pEnd; ++pMod)
     {
       float32_t f = *pFft * *pFft;
       ++pFft;
       f += *pFft * *pFft;
       ++pFft;
-	  if (!idx) {
-        *pSpec = f;
-      } else {
-        *pSpec += f;
-      }
+      *pMod = f;
     }
-    if (!idx) {
-      idx = 1;
-    } else {
-      idx = 0;
-      xSemaphoreGive(hSpecReadySemaphore);
-    }
+    /* Wake up data plotting routine */
+    xSemaphoreGive(hSpecReadySemaphore);
   }
 }
 
@@ -262,6 +308,9 @@ int main(void)
   /* Configure LED and joystick */
   BSP_LED_Init(LED4);
   BSP_JOY_Init(JOY_MODE_GPIO);
+
+  /* Configure glass LCD */
+  BSP_LCD_GLASS_Init();
 
   /* Initialize spectrum display */
   spec_display_init();
