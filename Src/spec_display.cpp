@@ -137,7 +137,7 @@ void spec_display_init(void)
 /* Quick & dirty transformation to logarithmic scale */
 static inline uint8_t to_log_scale(float32_t f)
 {
-#define LOG_OFFSET 630
+#define LOG_OFFSET 625
 #define LOG_MUL 2
 #define LOG_DIV 1
 
