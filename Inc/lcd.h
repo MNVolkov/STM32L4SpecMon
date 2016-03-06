@@ -17,5 +17,5 @@
 #define LCD_SPI SPI1
 #define LCD_SPI_AF GPIO_AF5_SPI1
 
-#define LCD_W 320
-#define LCD_H 240
+#define LCD_W 240
+#define LCD_H 320

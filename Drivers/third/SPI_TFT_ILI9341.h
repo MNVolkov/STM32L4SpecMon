@@ -269,8 +269,10 @@
    *
    */  
   void set_orientation(unsigned int o);
-  
-  
+
+
+  void set_scrolling_offset(unsigned off);
+ 
   /** read out the manufacturer ID of the LCD
    *  can used for checking the connection to the display
    *  @returns ID

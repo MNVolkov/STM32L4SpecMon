@@ -79,6 +79,12 @@ void SPI_TFT_ILI9341::set_orientation(unsigned int o)
     WindowMax();
 } 
 
+void SPI_TFT_ILI9341::set_scrolling_offset(unsigned off)
+{
+    wr_cmd(0x37);
+    SPI::write((off >> 8) & 0xff);
+    SPI::write(off & 0xff);	
+}
 
 // write command to tft register
 
