@@ -4,6 +4,8 @@
 #include "mbed_io_ex.h"
 #include "lcd.h"
 #include "SPI_TFT_ILI9341.h"
+#include "Arial12x12.h"
+#include "Arial28x28.h"
 
 //#define LCD_TEST
 
@@ -21,7 +23,7 @@ static SPI_TFT_ILI9341* s_lcd;
 
 static uint16_t s_spec_bmp[SPEC_LEN];
 static uint16_t s_color_ramp[256];
-static int s_next_row = 0;
+static int s_next_row = LCD_H - 1;
 
 struct rgb {
 	uint8_t r;
@@ -117,10 +119,15 @@ void spec_display_init(void)
 	spi_handle_init(&s_lcd_spi, 8, 0, SPI_BAUDRATEPRESCALER_2);
 
 	s_lcd = new SPI_TFT_ILI9341(s_lcd_mosi, s_lcd_miso, s_lcd_sclk, s_lcd_cs, s_lcd_rst, s_lcd_dc);
+	s_lcd->set_orientation(2);
 	
 	struct rgb const* bkg = &s_rainbow[0].color;
 	s_lcd->background(pack_rgb(bkg->r, bkg->g, bkg->b));
 	s_lcd->cls();
+	s_lcd->foreground(Magenta);
+	s_lcd->set_font((unsigned char*)Arial28x28);
+	s_lcd->locate(57, 100);
+	s_lcd->puts("Spectrum");
 
 #ifdef LCD_TEST
 	bouncing_ball(*s_lcd);
@@ -152,15 +159,15 @@ static inline uint8_t to_log_scale(float32_t f)
 void spec_display_show(float32_t spec[SPEC_LEN])
 {
 	float32_t const *pSpec = spec, *pEnd = pSpec + SPEC_LEN;
-	uint16_t* pBmp = s_spec_bmp + SPEC_LEN - 1;
+	uint16_t* pBmp = s_spec_bmp;
 	for (; pSpec < pEnd; ++pSpec) {
 		uint8_t l = to_log_scale(*pSpec);
-		*pBmp-- = s_color_ramp[l];
+		*pBmp++ = s_color_ramp[l];
 	}
-	s_lcd->set_scrolling_offset(s_next_row);
+	s_lcd->set_scrolling_offset(LCD_H - 1 - s_next_row);
 	s_lcd->Bitmap(0, s_next_row, SPEC_LEN, 1, (unsigned char*)s_spec_bmp);
-	if (++s_next_row >= LCD_H) {
-		s_next_row = 0;
+	if (--s_next_row < 0) {
+		s_next_row = LCD_H - 1;
 	}
 }
 

@@ -17,3 +17,4 @@ extern "C" {
 #include <cstring>
 
 #define std
+#define __align(x)
