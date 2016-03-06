@@ -92,6 +92,7 @@ void SpecDisplayTask(void* ctx)
     int i;
     /* Wait spectrum ready */
     xSemaphoreTake(hSpecReadySemaphore, ~0);
+    BSP_LED_Toggle(LED4);
     for (i = 0; i < SPEC_LEN; ++i)
     {
     }
@@ -100,9 +101,9 @@ void SpecDisplayTask(void* ctx)
 
 void FrameProcessingTask(void* ctx)
 {
+  int idx = 0;
   for (;;)
   {
-    int idx = 0;
     float32_t *pSpec = SpecBuff, *pEnd = SpecBuff + SPEC_LEN;
     float32_t const* pFft = &FftBuff[2];
     /* Wait frame ready */
@@ -199,9 +200,9 @@ static void osInit(void)
   hDataReadySemaphore  = xSemaphoreCreateCounting(1, 0);
   hFrameReadySemaphore = xSemaphoreCreateCounting(1, 0);
   hSpecReadySemaphore  = xSemaphoreCreateCounting(1, 0);
-  xTaskCreate(DataAcquisitionTask, "Acquisition", 64, 0, 2, &hDataAcquisitionTask);
-  xTaskCreate(FrameProcessingTask, "Processing",  64, 0, 2, &hFrameProcessingTask);
-  xTaskCreate(SpecDisplayTask,     "Display",     64, 0, 2, &hSpecDisplayTask);
+  xTaskCreate(DataAcquisitionTask, "Acquisition", 128, 0, 2, &hDataAcquisitionTask);
+  xTaskCreate(FrameProcessingTask, "Processing",  128, 0, 3, &hFrameProcessingTask);
+  xTaskCreate(SpecDisplayTask,     "Display",     128, 0, 1, &hSpecDisplayTask);
 }
 
 /**
@@ -542,8 +543,10 @@ void HAL_SAI_MspInit(SAI_HandleTypeDef *hsai)
   */
 void HAL_DFSDM_FilterRegConvHalfCpltCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_filter)
 {
+  BaseType_t xHigherPriorityTaskWoken;
   DmaRecHalfBuffCplt = 1;
-  xSemaphoreGiveFromISR(hDataReadySemaphore, 0);
+  xSemaphoreGiveFromISR(hDataReadySemaphore, &xHigherPriorityTaskWoken);
+  portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 /**
@@ -555,8 +558,10 @@ void HAL_DFSDM_FilterRegConvHalfCpltCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_
   */
 void HAL_DFSDM_FilterRegConvCpltCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_filter)
 {
+  BaseType_t xHigherPriorityTaskWoken;
   DmaRecBuffCplt = 1;
-  xSemaphoreGiveFromISR(hDataReadySemaphore, 0);
+  xSemaphoreGiveFromISR(hDataReadySemaphore, &xHigherPriorityTaskWoken);
+  portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 /* FreeRTOS hooks */
