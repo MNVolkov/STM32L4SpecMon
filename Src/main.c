@@ -125,6 +125,12 @@ void SpecDisplayTask(void* ctx)
   }
 }
 
+#ifdef HIGH_FREQ_RANGE
+#define FFT_PARAMS arm_cfft_sR_f32_len1024
+#else
+#define FFT_PARAMS arm_cfft_sR_f32_len2048
+#endif
+
 void FrameProcessingTask(void* ctx)
 {
   int idx = 0;
@@ -134,7 +140,7 @@ void FrameProcessingTask(void* ctx)
     float32_t const* pFft = &FftBuff[2];
     /* Wait frame ready */
     xSemaphoreTake(hFrameReadySemaphore, ~0);
-    arm_cfft_f32(&arm_cfft_sR_f32_len1024, FftBuff, 0, 1);
+    arm_cfft_f32(&FFT_PARAMS, FftBuff, 0, 1);
     for (; pSpec < pEnd; ++pSpec)
     {
       float32_t f = *pFft * *pFft;

@@ -54,7 +54,18 @@
 /* Exported types ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
 /* Exported macro ------------------------------------------------------------*/
+
+/*
+ * There are 2 options regarding frequency range.
+ * High range - 13.8 kHz per screen width
+ * Low range  - 6.9  kHz per screen width
+ * In both cases we are sampling with 44.1 kHz frequency so the full available range is 22.05 kHz
+ */
+#ifdef HIGH_FREQ_RANGE
 #define BUFF_SAMPLES 1024
+#else
+#define BUFF_SAMPLES 2048
+#endif
 
 /* Exported functions ------------------------------------------------------- */
 void Error_Handler(void);
