@@ -317,6 +317,8 @@
           <state>$PROJ_DIR$\..\Drivers\STM32L4xx_HAL_Driver\Inc</state>
           <state>$PROJ_DIR$\..\Drivers\BSP\STM32L476G-Discovery</state>
           <state>$PROJ_DIR$\..\Drivers\BSP\Components\Common</state>
+          <state>$PROJ_DIR$\..\Drivers\third</state>
+          <state>$PROJ_DIR$\..\compat</state>
           <state>$PROJ_DIR$\..\FreeRTOS\Source\include</state>
           <state>$PROJ_DIR$\..\FreeRTOS\Source\CMSIS_RTOS</state>
           <state>$PROJ_DIR$\..\FreeRTOS\Source\portable\IAR\ARM_CM4F</state>
@@ -374,7 +376,7 @@
         </option>
         <option>
           <name>IccLang</name>
-          <state>0</state>
+          <state>2</state>
         </option>
         <option>
           <name>IccCDialect</name>
@@ -980,6 +982,15 @@
         <name>$PROJ_DIR$\..\Src\main.c</name>
       </file>
       <file>
+        <name>$PROJ_DIR$\..\compat\mbed_io.cpp</name>
+      </file>
+      <file>
+        <name>$PROJ_DIR$\..\compat\mbed_stream.cpp</name>
+      </file>
+      <file>
+        <name>$PROJ_DIR$\..\Src\spec_display.cpp</name>
+      </file>
+      <file>
         <name>$PROJ_DIR$\..\Src\stm32l4xx_it.c</name>
       </file>
     </group>
@@ -1038,6 +1049,21 @@
       </file>
       <file>
         <name>$PROJ_DIR$\..\Drivers\STM32L4xx_HAL_Driver\Src\stm32l4xx_hal_sai.c</name>
+      </file>
+      <file>
+        <name>$PROJ_DIR$\..\Drivers\STM32L4xx_HAL_Driver\Src\stm32l4xx_hal_spi.c</name>
+      </file>
+    </group>
+    <group>
+      <name>third</name>
+      <file>
+        <name>$PROJ_DIR$\..\Drivers\third\GraphicsDisplay.cpp</name>
+      </file>
+      <file>
+        <name>$PROJ_DIR$\..\Drivers\third\SPI_TFT_ILI9341.cpp</name>
+      </file>
+      <file>
+        <name>$PROJ_DIR$\..\Drivers\third\TextDisplay.cpp</name>
       </file>
     </group>
   </group>

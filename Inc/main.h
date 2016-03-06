@@ -48,11 +48,13 @@
 /* CMSIS OS includes component */
 #include "cmsis_os.h"
 
+/* Other includes */
+#include "spec_display.h"
+
 /* Exported types ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
 /* Exported macro ------------------------------------------------------------*/
 #define BUFF_SAMPLES 1024
-#define SPEC_LEN     320
 
 /* Exported functions ------------------------------------------------------- */
 void Error_Handler(void);

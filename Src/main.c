@@ -96,29 +96,31 @@ void SpecDisplayTask(void* ctx)
   for (;;) {
     /* Wait spectrum ready */
     xSemaphoreTake(hSpecReadySemaphore, ~0);
+    /* Process joystick input to on/off display updates */
     switch (BSP_JOY_GetState())
     {
     case JOY_SEL:
       if (!bt_pressed) {
-		if (active) {
-		  active = 0;
-		  BSP_LED_Off(LED4);
-	    } else {
-		  active = 1;
-		  BSP_LED_On(LED4);
-	    }
+        if (active) {
+          active = 0;
+          BSP_LED_Off(LED4);
+        } else {
+          active = 1;
+          BSP_LED_On(LED4);
+        }
       }
-	  bt_pressed = BT_DEBOUNCE;
-	  break;
+      bt_pressed = BT_DEBOUNCE;
+      break;
     case JOY_NONE:
-	  if (bt_pressed) {
-		--bt_pressed;
-	  }
-	  break;
-	default:
-	  ;
+      if (bt_pressed) {
+        --bt_pressed;
+      }
+      break;
+    default:
+      ;
     }
     if (active) {
+      spec_display_show(SpecBuff);
     }
   }
 }
@@ -254,6 +256,9 @@ int main(void)
   /* Configure LED and joystick */
   BSP_LED_Init(LED4);
   BSP_JOY_Init(JOY_MODE_GPIO);
+
+  /* Initialize spectrum display */
+  spec_display_init();
 
   /* Initialize DFSDM channels and filter for record */
   DFSDM_Init();
