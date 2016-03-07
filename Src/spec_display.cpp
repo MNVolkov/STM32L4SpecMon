@@ -7,8 +7,6 @@
 #include "Arial12x12.h"
 #include "Arial28x28.h"
 
-//#define LCD_TEST
-
 static PinName s_lcd_cs (LCD_CS_PORT,  LCD_CS_PIN);
 static PinName s_lcd_dc (LCD_DC_PORT,  LCD_DC_PIN);
 static PinName s_lcd_rst(LCD_RST_PORT, LCD_RST_PIN);
@@ -75,27 +73,33 @@ static inline uint16_t color_ramp(uint8_t v)
 	return pack_rgb(r, g, b);
 }
 
-#ifdef LCD_TEST
-void bouncing_ball(SPI_TFT_ILI9341& lcd)
+#define COLOR_MAP_W 128
+#define COLOR_MAP_H 32
+
+static void show_info(void)
 {
-	int const R = 31;
-	uint16_t color = Red, cdelta = 7103;
-	int x = R, y = R, dx = 1, dy = 1;
-	for (;;) {
-		lcd.fillcircle(x, y, R, color);
-		x += dx;
-		y += dy;
-		if (x <= R || LCD_W - R <= x) {
-			dx = -dx;
-			color += cdelta;
-		}
-		if (y <= R || LCD_H - R <= y) {
-			dy = -dy;
-			color += cdelta;
-		}
-	}
+	static uint16_t color_map_bmp[COLOR_MAP_W*COLOR_MAP_H];
+	int i, j;
+	for (i = 0; i < COLOR_MAP_H; ++i)
+		for (j = 0; j < COLOR_MAP_W; ++j)
+			color_map_bmp[i*COLOR_MAP_W+j] = s_color_ramp[2*j];
+
+	s_lcd->background(Black);
+	s_lcd->cls();
+	s_lcd->foreground(White);
+	s_lcd->set_font((unsigned char*)Arial28x28);
+	s_lcd->locate(57, 100);
+	s_lcd->puts("Spectrum");
+
+	s_lcd->Bitmap((LCD_W - COLOR_MAP_W) / 2, 50, COLOR_MAP_W, COLOR_MAP_H, (unsigned char*)color_map_bmp);
+	s_lcd->set_font((unsigned char*)Arial12x12);
+	s_lcd->locate(35, 60);
+	s_lcd->puts("0");
+	s_lcd->locate(195, 60);
+	s_lcd->puts("90dB");
+	s_lcd->locate(4, 4);
+	s_lcd->puts("0 Hz");
 }
-#endif
 
 void spec_display_init(void)
 {
@@ -120,35 +124,21 @@ void spec_display_init(void)
 
 	s_lcd = new SPI_TFT_ILI9341(s_lcd_mosi, s_lcd_miso, s_lcd_sclk, s_lcd_cs, s_lcd_rst, s_lcd_dc);
 	s_lcd->set_orientation(2);
-	
-	struct rgb const* bkg = &s_rainbow[0].color;
-	s_lcd->background(pack_rgb(bkg->r, bkg->g, bkg->b));
-	s_lcd->cls();
-	s_lcd->foreground(Magenta);
-	s_lcd->set_font((unsigned char*)Arial28x28);
-	s_lcd->locate(57, 100);
-	s_lcd->puts("Spectrum");
 
-#ifdef LCD_TEST
-	bouncing_ball(*s_lcd);
-#endif
+	show_info();
 }
 
 /* Quick & dirty transformation to logarithmic scale */
 static inline uint8_t to_log_scale(float32_t f)
 {
-#define LOG_OFFSET 625
-#define LOG_MUL 2
-#define LOG_DIV 1
-
+	int const offset = 1250;
 	int x;
 	union {
 		float32_t f;
 		uint32_t  u;
 	} v;
 	v.f = f;
-	x = ((v.u >> 21) & 0x2ff) - LOG_OFFSET;
-	x = x * LOG_MUL / LOG_DIV;
+	x = ((v.u >> 20) & 0x7ff) - offset;
 	if (x < 0)
 		return 0;
 	if (x > 255)
@@ -164,10 +154,10 @@ void spec_display_show(float32_t spec[SPEC_LEN])
 		uint8_t l = to_log_scale(*pSpec);
 		*pBmp++ = s_color_ramp[l];
 	}
-	s_lcd->set_scrolling_offset(LCD_H - 1 - s_next_row);
 	s_lcd->Bitmap(0, s_next_row, SPEC_LEN, 1, (unsigned char*)s_spec_bmp);
 	if (--s_next_row < 0) {
 		s_next_row = LCD_H - 1;
 	}
+	s_lcd->set_scrolling_offset(LCD_H - 1 - s_next_row);
 }
 
