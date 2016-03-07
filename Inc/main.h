@@ -58,6 +58,8 @@
 /* Exported functions ------------------------------------------------------- */
 void Error_Handler(void);
 
+#define assert(v) do { if (!(v)) Error_Handler(); } while(0)
+
 #endif /* __MAIN_H */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

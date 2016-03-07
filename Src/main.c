@@ -52,13 +52,12 @@
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
-#define MODES 3
-#define BUFF_SAMPLES 2048
+#define BUFF_SAMPLES 1024
 #define FFT_BUFF_LEN (BUFF_SAMPLES*2)
-#define MOD_BUFF_LEN (SPEC_LEN<<(MODES-1))
+#define MOD_BUFF_LEN (BUFF_SAMPLES/2-1)
 
-#if (BUFF_SAMPLES == 2048)
-#define FFT_PARAMS arm_cfft_sR_f32_len2048
+#if (BUFF_SAMPLES == 1024)
+#define FFT_PARAMS arm_cfft_sR_f32_len1024
 #endif
 
 #define PLAY_BUFF_SAMPLES (2*BUFF_SAMPLES)
@@ -67,30 +66,54 @@
 #define BT_DEBOUNCE 2
 
 /* Private variables ---------------------------------------------------------*/
-DFSDM_Channel_HandleTypeDef  DfsdmChannelHandle;
-DFSDM_Filter_HandleTypeDef   DfsdmFilterHandle;
-DMA_HandleTypeDef            hDfsdmDma;
-SAI_HandleTypeDef            SaiHandle;
-DMA_HandleTypeDef            hSaiDma;
-AUDIO_DrvTypeDef            *audio_drv;
-__no_init int32_t            FrameBuff[BUFF_SAMPLES];
-__no_init float32_t          FftBuff[FFT_BUFF_LEN];
-__no_init float32_t          ModBuff[MOD_BUFF_LEN];
-__no_init float32_t          SpecBuff[SPEC_LEN];
-__no_init int16_t            PlayBuff[PLAY_BUFF_SAMPLES];
-uint32_t                     DmaRecHalfBuffCplt  = 0;
-uint32_t                     DmaRecBuffCplt      = 0;
-uint32_t                     PlaybackStarted     = 0;
+static DFSDM_Channel_HandleTypeDef  DfsdmChannelHandle;
+static DFSDM_Filter_HandleTypeDef   DfsdmFilterHandle;
+DMA_HandleTypeDef                   hDfsdmDma;
+SAI_HandleTypeDef                   SaiHandle;
+static DMA_HandleTypeDef            hSaiDma;
+static AUDIO_DrvTypeDef            *audio_drv;
+static __no_init int32_t            FrameBuff[BUFF_SAMPLES];
+static __no_init float32_t          FftBuff[FFT_BUFF_LEN];
+static __no_init float32_t          ModBuff[MOD_BUFF_LEN];
+static __no_init float32_t          SpecBuff[SPEC_LEN];
+static __no_init int16_t            PlayBuff[PLAY_BUFF_SAMPLES];
+static uint32_t                     DmaRecHalfBuffCplt  = 0;
+static uint32_t                     DmaRecBuffCplt      = 0;
 
 /* FreeRTOS synchronization primitives */
-SemaphoreHandle_t hDataReadySemaphore;
-SemaphoreHandle_t hFrameReadySemaphore;
-SemaphoreHandle_t hSpecReadySemaphore;
+static SemaphoreHandle_t hDataReadySemaphore;
+static SemaphoreHandle_t hSpecReadySemaphore;
+static SemaphoreHandle_t hUIWakeUpSemaphore;
 
 /* FreeRTOS tasks */
-TaskHandle_t      hDataAcquisitionTask;
-TaskHandle_t      hFrameProcessingTask;
-TaskHandle_t      hSpecDisplayTask;
+static TaskHandle_t      hDataAcquisitionTask;
+static TaskHandle_t      hSpecProcessTask;
+static TaskHandle_t      hUITask;
+
+struct mode_descr {
+  const uint8_t* info;
+  int bin_samples;
+  void (*process)(void);
+  int refresh_period;
+};
+
+static void process_spec(void);
+static void process_spec2(void);
+
+static const struct mode_descr modes[] = {
+  {"650 HZ", 16, process_spec, 4},
+  {"1300HZ", 8,  process_spec, 2},
+  {"2600HZ", 4,  process_spec, 2},
+  {"5  kHZ", 2,  process_spec, 1},
+  {"10 kHZ", 1,  process_spec, 1},
+  {"20 kHZ", 1,  process_spec2, 1},
+};
+
+#define NMODES (sizeof(modes)/sizeof(modes[0]))
+#define DEF_MODE 2
+
+static int curr_mode = DEF_MODE;
+static int refresh_active = 1;
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
@@ -99,38 +122,39 @@ static void Playback_Init(void);
 
 /* Private functions ---------------------------------------------------------*/
 
-static const uint8_t* mode_info[MODES] = {
-  "5  kHZ",
-  "10 kHZ",
-  "20 kHZ",
-};
-
-void SpecDisplayTask(void* ctx)
+void UITask(void* ctx)
 {
-  int mode = 0, active = 1;
-  int m_pressed = 0, a_pressed = 0;
+  int m_pressed = 0, a_pressed = 0, refresh_cnt = 0;
   BSP_LED_On(LED4);
-  BSP_LCD_GLASS_DisplayString((uint8_t*)mode_info[mode]);
-  for (;;) {
-    /* Wait spectrum ready */
-    xSemaphoreTake(hSpecReadySemaphore, ~0);
-    /* Process joystick input to on/off display updates */
+  BSP_LCD_GLASS_DisplayString((uint8_t*)modes[curr_mode].info);
+  for (;;)
+  {
+    xSemaphoreTake(hUIWakeUpSemaphore, ~0);
+    if (!refresh_cnt) {
+      refresh_cnt = modes[curr_mode].refresh_period;
+      if (refresh_active) {
+        /* Refresh display */
+        spec_display_show(SpecBuff);
+      }
+    }
+    --refresh_cnt;
+    /* Process joystick input */
     switch (BSP_JOY_GetState())
     {
     case JOY_RIGHT:
       if (!m_pressed) {
-        if (mode > 0) {
-          --mode;
-          BSP_LCD_GLASS_DisplayString((uint8_t*)mode_info[mode]);
+        if (curr_mode > 0) {
+          --curr_mode;
+          BSP_LCD_GLASS_DisplayString((uint8_t*)modes[curr_mode].info);
         }
       }
       m_pressed = BT_DEBOUNCE;
       break;
     case JOY_LEFT:
       if (!m_pressed) {
-        if (mode < MODES-1) {
-          ++mode;
-          BSP_LCD_GLASS_DisplayString((uint8_t*)mode_info[mode]);
+        if (curr_mode < NMODES-1) {
+          ++curr_mode;
+          BSP_LCD_GLASS_DisplayString((uint8_t*)modes[curr_mode].info);
         }
       }
       m_pressed = BT_DEBOUNCE;
@@ -143,11 +167,11 @@ void SpecDisplayTask(void* ctx)
       break;
     case JOY_SEL:
       if (!a_pressed) {
-        if (active) {
-          active = 0;
+        if (refresh_active) {
+          refresh_active = 0;
           BSP_LED_Off(LED4);
         } else {
-          active = 1;
+          refresh_active = 1;
           BSP_LED_On(LED4);
         }
       }
@@ -165,52 +189,79 @@ void SpecDisplayTask(void* ctx)
     default:
       ;
     }
-    if (!active) {
-      continue;
-    }
-    if (mode) {
-      /* Spectrum binning */
-      unsigned bin = 1 << mode, curr_bin = bin;
-      float32_t *pSpec = SpecBuff;
-      float32_t *pMod = ModBuff, *pEnd = ModBuff + MOD_BUFF_LEN;
-      float32_t sum = 0;
-      for (; pMod < pEnd; ++pMod)
-      {
-        sum += *pMod;
-        if (!--curr_bin) {
-          *pSpec++ = sum / bin;
-          curr_bin = bin;
-          sum = 0;
-        }
-      }
-      spec_display_show(SpecBuff);
-    } else {
-      spec_display_show(ModBuff);
+  }
+}
+
+static void process_spec(void)
+{
+  memcpy(SpecBuff, ModBuff, sizeof(SpecBuff));
+}
+
+static void process_spec2(void)
+{
+  float32_t *pSpec = SpecBuff, *pEnd = pSpec + SPEC_LEN;
+  float32_t *pMod = ModBuff;
+  for (; pSpec < pEnd; ++pSpec)
+  {
+    float v = *pMod++;
+    v += *pMod++;
+    *pSpec = v / 2;
+  }
+}
+
+void SpecProcessTask(void* ctx)
+{
+  for (;;)
+  {
+    /* Wait spectrum ready */
+    xSemaphoreTake(hSpecReadySemaphore, ~0);
+    /* Call mode specific processing routine */
+    modes[curr_mode].process();
+  }
+}
+
+static inline void ProcessFrame(void)
+{
+  float32_t *pMod = ModBuff, *pEnd = ModBuff + MOD_BUFF_LEN;
+  float32_t const* pFft = &FftBuff[2];
+  /* Transform to frequency domain */
+  arm_cfft_f32(&FFT_PARAMS, FftBuff, 0, 1);
+  /* Calculate complex module square */
+  for (; pMod < pEnd; ++pMod)
+  {
+    *pMod  = *pFft * *pFft; ++pFft;
+    *pMod += *pFft * *pFft; ++pFft;
+  }
+}
+
+static inline void CollectSamples(int from, int to, float32_t** pFftFrame, int bin_samples)
+{
+  int i, bin_cnt = bin_samples;
+  int32_t const* pSample = FrameBuff + from;
+  int16_t* pPlayBuff = PlayBuff + from * 2;
+  float32_t bin = 0;
+  for (i = from; i < to; ++i)
+  {
+    int32_t val = *pSample++;
+    int16_t sval = SaturaLH((val >> 8), -32768, 32767);
+    *pPlayBuff++ = sval;
+    *pPlayBuff++ = sval;
+    bin += (float32_t)val;
+    if (!--bin_cnt) {
+      bin_cnt = bin_samples;
+      *(*pFftFrame)++ = bin / bin_samples;
+      *(*pFftFrame)++ = 0;
+      bin = 0;
     }
   }
 }
 
-void FrameProcessingTask(void* ctx)
+static inline void StartAcquisition(void)
 {
-  for (;;)
+  /* Start DFSDM conversions */
+  if (HAL_OK != HAL_DFSDM_FilterRegularStart_DMA(&DfsdmFilterHandle, FrameBuff, BUFF_SAMPLES))
   {
-    float32_t *pMod = ModBuff, *pEnd = ModBuff + MOD_BUFF_LEN;
-    float32_t const* pFft = &FftBuff[2];
-    /* Wait frame ready */
-    xSemaphoreTake(hFrameReadySemaphore, ~0);
-    /* Transform to frequency domain */
-    arm_cfft_f32(&FFT_PARAMS, FftBuff, 0, 1);
-    /* Calculate complex module square */
-    for (; pMod < pEnd; ++pMod)
-    {
-      float32_t f = *pFft * *pFft;
-      ++pFft;
-      f += *pFft * *pFft;
-      ++pFft;
-      *pMod = f;
-    }
-    /* Wake up data plotting routine */
-    xSemaphoreGive(hSpecReadySemaphore);
+    Error_Handler();
   }
 }
 
@@ -226,35 +277,14 @@ static inline void StartPlayback(void)
   }
 }
 
-static inline void CollectSamples(int from, int to)
-{
-  int i;
-  int32_t const* pSample = FrameBuff + from;
-  int16_t* pPlayBuff = PlayBuff + from * 2;
-  float32_t* pFftFrame = FftBuff + from * 2;
-  for (i = from; i < to; ++i)
-  {
-    int32_t val = *pSample++;
-    int16_t sval = SaturaLH((val >> 8), -32768, 32767);
-    *pPlayBuff++ = sval;
-    *pPlayBuff++ = sval;
-    *pFftFrame++ = (float32_t)val;
-    *pFftFrame++ = 0;
-  }	
-}
-
-static inline void StartAcquisition(void)
-{
-  /* Start DFSDM conversions */
-  if(HAL_OK != HAL_DFSDM_FilterRegularStart_DMA(&DfsdmFilterHandle, FrameBuff, BUFF_SAMPLES))
-  {
-    Error_Handler();
-  }
-}
-
 void DataAcquisitionTask(void* ctx)
 {
+  uint32_t PlaybackStarted = 0;
+  float32_t *pFftFrame = FftBuff, *pFftEnd = FftBuff + FFT_BUFF_LEN;
+  int bin_samples = modes[DEF_MODE].bin_samples;
+
   StartAcquisition();
+
   /* Data acquisition loop */
   for (;;)
   {
@@ -262,18 +292,26 @@ void DataAcquisitionTask(void* ctx)
     if (DmaRecHalfBuffCplt)
     {
       DmaRecHalfBuffCplt = 0;
-      CollectSamples(0, BUFF_SAMPLES/2);
+      CollectSamples(0, BUFF_SAMPLES/2, &pFftFrame, bin_samples);
       if (!PlaybackStarted)
       {
         StartPlayback();
         PlaybackStarted = 1;
-      }      
+      }
     }
     if (DmaRecBuffCplt)
     {
       DmaRecBuffCplt = 0;
-      CollectSamples(BUFF_SAMPLES/2, BUFF_SAMPLES);
-      xSemaphoreGive(hFrameReadySemaphore);
+      CollectSamples(BUFF_SAMPLES/2, BUFF_SAMPLES, &pFftFrame, bin_samples);
+      if (pFftFrame >= pFftEnd)
+      {
+          assert(pFftFrame == pFftEnd);
+          pFftFrame = FftBuff;
+          bin_samples = modes[curr_mode].bin_samples;
+          ProcessFrame();
+          xSemaphoreGive(hSpecReadySemaphore);
+      }
+      xSemaphoreGive(hUIWakeUpSemaphore);
     }
   }
 }
@@ -281,12 +319,12 @@ void DataAcquisitionTask(void* ctx)
 /* Initialize FreeRTOS stuff */
 static void osInit(void)
 {
-  hDataReadySemaphore  = xSemaphoreCreateCounting(1, 0);
-  hFrameReadySemaphore = xSemaphoreCreateCounting(1, 0);
-  hSpecReadySemaphore  = xSemaphoreCreateCounting(1, 0);
-  xTaskCreate(DataAcquisitionTask, "Acquisition", 128, 0, 2, &hDataAcquisitionTask);
-  xTaskCreate(FrameProcessingTask, "Processing",  128, 0, 3, &hFrameProcessingTask);
-  xTaskCreate(SpecDisplayTask,     "Display",     128, 0, 1, &hSpecDisplayTask);
+  hDataReadySemaphore  = xSemaphoreCreateBinary();
+  hSpecReadySemaphore  = xSemaphoreCreateBinary();
+  hUIWakeUpSemaphore   = xSemaphoreCreateBinary();
+  xTaskCreate(DataAcquisitionTask, "Acquisition", 128, 0, 3, &hDataAcquisitionTask);
+  xTaskCreate(SpecProcessTask,     "Processing",  128, 0, 2, &hSpecProcessTask);
+  xTaskCreate(UITask,              "UI",          128, 0, 1, &hUITask);
 }
 
 /**
