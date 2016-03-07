@@ -52,9 +52,6 @@
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
-#define PLAY_BUFF_SAMPLES (2*BUFF_SAMPLES)
-#define SaturaLH(N, L, H) (((N)<(L))?(L):(((N)>(H))?(H):(N)))
-
 #define MODES 3
 #define BUFF_SAMPLES 2048
 #define FFT_BUFF_LEN (BUFF_SAMPLES*2)
@@ -63,6 +60,9 @@
 #if (BUFF_SAMPLES == 2048)
 #define FFT_PARAMS arm_cfft_sR_f32_len2048
 #endif
+
+#define PLAY_BUFF_SAMPLES (2*BUFF_SAMPLES)
+#define SaturaLH(N, L, H) (((N)<(L))?(L):(((N)>(H))?(H):(N)))
 
 #define BT_DEBOUNCE 2
 
