@@ -73,11 +73,11 @@ DMA_HandleTypeDef            hDfsdmDma;
 SAI_HandleTypeDef            SaiHandle;
 DMA_HandleTypeDef            hSaiDma;
 AUDIO_DrvTypeDef            *audio_drv;
-int32_t                      FrameBuff[BUFF_SAMPLES];
-float32_t                    FftBuff[FFT_BUFF_LEN];
-float32_t                    ModBuff[MOD_BUFF_LEN];
-float32_t                    SpecBuff[SPEC_LEN];
-int16_t                      PlayBuff[PLAY_BUFF_SAMPLES];
+__no_init int32_t            FrameBuff[BUFF_SAMPLES];
+__no_init float32_t          FftBuff[FFT_BUFF_LEN];
+__no_init float32_t          ModBuff[MOD_BUFF_LEN];
+__no_init float32_t          SpecBuff[SPEC_LEN];
+__no_init int16_t            PlayBuff[PLAY_BUFF_SAMPLES];
 uint32_t                     DmaRecHalfBuffCplt  = 0;
 uint32_t                     DmaRecBuffCplt      = 0;
 uint32_t                     PlaybackStarted     = 0;
@@ -100,6 +100,7 @@ static void Playback_Init(void);
 /* Private functions ---------------------------------------------------------*/
 
 static const uint8_t* mode_info[MODES] = {
+  "2500HZ",
   "5  kHZ",
   "10 kHZ",
   "20 kHZ",
