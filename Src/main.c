@@ -100,7 +100,6 @@ static void Playback_Init(void);
 /* Private functions ---------------------------------------------------------*/
 
 static const uint8_t* mode_info[MODES] = {
-  "2500HZ",
   "5  kHZ",
   "10 kHZ",
   "20 kHZ",
