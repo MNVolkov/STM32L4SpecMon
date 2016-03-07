@@ -11,6 +11,7 @@ extern "C" {
 
 void spec_display_init(void);
 void spec_display_show(float32_t spec[SPEC_LEN]);
+void spec_display_offset_adj(int delta);
 
 #ifdef __cplusplus
 }

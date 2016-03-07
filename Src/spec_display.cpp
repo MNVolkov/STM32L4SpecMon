@@ -19,6 +19,7 @@ static PinName s_lcd_sclk(LCD_SCK_PORT, LCD_SCK_PIN, &s_lcd_spi);
 
 static SPI_TFT_ILI9341* s_lcd;
 
+static int s_offset = 1250;
 static uint16_t s_spec_bmp[SPEC_LEN];
 static uint16_t s_color_ramp[256];
 static int s_next_row = LCD_H - 1;
@@ -128,17 +129,21 @@ void spec_display_init(void)
 	show_info();
 }
 
+void spec_display_offset_adj(int delta)
+{
+	s_offset += delta;
+}
+
 /* Quick & dirty transformation to logarithmic scale */
 static inline uint8_t to_log_scale(float32_t f)
 {
-	int const offset = 1250;
 	int x;
 	union {
 		float32_t f;
 		uint32_t  u;
 	} v;
 	v.f = f;
-	x = ((v.u >> 20) & 0x7ff) - offset;
+	x = ((v.u >> 20) & 0x7ff) - s_offset;
 	if (x < 0)
 		return 0;
 	if (x > 255)

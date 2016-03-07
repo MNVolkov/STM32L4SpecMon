@@ -135,6 +135,12 @@ void SpecDisplayTask(void* ctx)
       }
       m_pressed = BT_DEBOUNCE;
       break;
+    case JOY_UP:
+      spec_display_offset_adj(-1);
+      break;
+    case JOY_DOWN:
+      spec_display_offset_adj(1);
+      break;
     case JOY_SEL:
       if (!a_pressed) {
         if (active) {
