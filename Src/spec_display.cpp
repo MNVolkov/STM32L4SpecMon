@@ -19,7 +19,7 @@ static PinName s_lcd_sclk(LCD_SCK_PORT, LCD_SCK_PIN, &s_lcd_spi);
 
 static SPI_TFT_ILI9341* s_lcd;
 
-static int s_offset = 1250;
+static int s_offset = 1300;
 static uint16_t s_spec_bmp[SPEC_LEN];
 static uint16_t s_color_ramp[256];
 static int s_next_row = LCD_H - 1;
