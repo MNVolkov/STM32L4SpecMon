@@ -7,6 +7,14 @@
 #include "Arial12x12.h"
 #include "Arial28x28.h"
 
+// Uncomment for 60dB range
+#define LO_DR
+#ifdef LO_DR
+#define DR_STR "60dB"
+#else
+#define DR_STR "90dB"
+#endif
+
 static PinName s_lcd_cs (LCD_CS_PORT,  LCD_CS_PIN);
 static PinName s_lcd_dc (LCD_DC_PORT,  LCD_DC_PIN);
 static PinName s_lcd_rst(LCD_RST_PORT, LCD_RST_PIN);
@@ -98,7 +106,7 @@ static void show_info(void)
 	s_lcd->locate(35, COLOR_MAP_Y + 10);
 	s_lcd->puts("0");
 	s_lcd->locate(195, COLOR_MAP_Y + 10);
-	s_lcd->puts("90dB");
+	s_lcd->puts(DR_STR);
 	s_lcd->locate(4, 4);
 	s_lcd->puts("0 Hz");
 	s_lcd->locate(20, 20);
@@ -151,6 +159,9 @@ static inline uint8_t to_log_scale(float32_t f)
 	} v;
 	v.f = f;
 	x = ((v.u >> 20) & 0x7ff) - s_offset;
+#ifdef LO_DR
+	x = x * 3 / 2;
+#endif
 	if (x < 0)
 		return 0;
 	if (x > 255)
