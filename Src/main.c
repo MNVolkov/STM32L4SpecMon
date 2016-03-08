@@ -73,10 +73,10 @@ SAI_HandleTypeDef                   SaiHandle;
 static DMA_HandleTypeDef            hSaiDma;
 static AUDIO_DrvTypeDef            *audio_drv;
 static __no_init int32_t            FrameBuff[BUFF_SAMPLES];
+static __no_init int16_t            PlayBuff[PLAY_BUFF_SAMPLES];
 static __no_init float32_t          FftBuff[FFT_BUFF_LEN];
 static __no_init float32_t          ModBuff[MOD_BUFF_LEN];
-static __no_init float32_t          SpecBuff[SPEC_LEN];
-static __no_init int16_t            PlayBuff[PLAY_BUFF_SAMPLES];
+static float32_t                    SpecBuff[SPEC_LEN];
 static uint32_t                     DmaRecHalfBuffCplt  = 0;
 static uint32_t                     DmaRecBuffCplt      = 0;
 
