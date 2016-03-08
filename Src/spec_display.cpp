@@ -76,6 +76,7 @@ static inline uint16_t color_ramp(uint8_t v)
 
 #define COLOR_MAP_W 128
 #define COLOR_MAP_H 32
+#define COLOR_MAP_Y 80
 
 static void show_info(void)
 {
@@ -89,17 +90,23 @@ static void show_info(void)
 	s_lcd->cls();
 	s_lcd->foreground(White);
 	s_lcd->set_font((unsigned char*)Arial28x28);
-	s_lcd->locate(57, 100);
+	s_lcd->locate(57, COLOR_MAP_Y + COLOR_MAP_H + 20);
 	s_lcd->puts("Spectrum");
 
-	s_lcd->Bitmap((LCD_W - COLOR_MAP_W) / 2, 50, COLOR_MAP_W, COLOR_MAP_H, (unsigned char*)color_map_bmp);
+	s_lcd->Bitmap((LCD_W - COLOR_MAP_W) / 2, COLOR_MAP_Y, COLOR_MAP_W, COLOR_MAP_H, (unsigned char*)color_map_bmp);
 	s_lcd->set_font((unsigned char*)Arial12x12);
-	s_lcd->locate(35, 60);
+	s_lcd->locate(35, COLOR_MAP_Y + 10);
 	s_lcd->puts("0");
-	s_lcd->locate(195, 60);
+	s_lcd->locate(195, COLOR_MAP_Y + 10);
 	s_lcd->puts("90dB");
 	s_lcd->locate(4, 4);
 	s_lcd->puts("0 Hz");
+	s_lcd->locate(20, 20);
+	s_lcd->puts("use <> to select range");
+	s_lcd->locate(20, 34);
+	s_lcd->puts("up / down to adj sensitivity");
+	s_lcd->locate(20, 48);
+	s_lcd->puts("centre to start / stop");
 }
 
 void spec_display_init(void)
